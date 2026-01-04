@@ -1,0 +1,15 @@
+# Secrets (generated from .env.op via `op inject`)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
