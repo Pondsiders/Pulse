@@ -7,6 +7,9 @@ dependencies = [
     "apscheduler>=3.10",
     "python-dotenv>=1.0",
     "logfire>=0.50",
+    "redis>=5.0",
+    "icalendar>=5.0",
+    "pendulum>=3.0",
 ]
 
 [build-system]
