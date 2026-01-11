@@ -56,6 +56,7 @@ def get_events(cal: Calendar, start_date: pendulum.Date, end_date: pendulum.Date
                         "summary": str(component.get("summary", "Untitled")),
                         "location": str(component.get("location")) if component.get("location") else None,
                         "all_day": True,
+                        "owner": None,  # Will be set by caller
                     })
             else:
                 # Timed event: convert to Pacific, compare date portion
@@ -67,6 +68,7 @@ def get_events(cal: Calendar, start_date: pendulum.Date, end_date: pendulum.Date
                         "summary": str(component.get("summary", "Untitled")),
                         "location": str(component.get("location")) if component.get("location") else None,
                         "all_day": False,
+                        "owner": None,  # Will be set by caller
                     })
 
     # Sort: by date, then all-day before timed, then by time
@@ -94,6 +96,10 @@ def format_event(event: dict) -> str:
         loc = event["location"][:40]
         line += f" @ {loc}"
 
+    # Add owner tag if not Jeffery (his events are the default)
+    if event.get("owner") and event["owner"] != "Jeffery":
+        line += f" [{event['owner']}]"
+
     return line
 
 
@@ -116,6 +122,9 @@ def gather_calendar() -> str | None:
         start_date = today
         end_date = today.add(days=days_ahead)
         events = get_events(cal, start_date, end_date)
+        # Tag each event with owner
+        for event in events:
+            event["owner"] = name
         all_events.extend(events)
 
     if not all_events:
