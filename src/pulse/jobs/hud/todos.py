@@ -4,7 +4,9 @@ import json
 import os
 import urllib.request
 
-import logfire
+from pulse.otel import get_logger
+
+log = get_logger()
 
 API_BASE = "https://api.todoist.com/rest/v2"
 
@@ -33,7 +35,7 @@ def api_request(endpoint: str, token: str) -> dict | list | None:
         with urllib.request.urlopen(req, timeout=10) as response:
             return json.loads(response.read().decode())
     except Exception as e:
-        logfire.error("Failed to fetch from Todoist", endpoint=endpoint, error=str(e))
+        log.error(f"Failed to fetch from Todoist: {e}")
         return None
 
 
@@ -57,7 +59,7 @@ def gather_todos() -> str | None:
     """Gather Todoist tasks for HUD display, grouped by project."""
     token = get_token()
     if not token:
-        logfire.warn("TODOIST_TOKEN not set, skipping todos")
+        log.warning("TODOIST_TOKEN not set, skipping todos")
         return None
 
     # Get all projects to map IDs to names

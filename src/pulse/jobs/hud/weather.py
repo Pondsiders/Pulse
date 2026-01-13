@@ -5,7 +5,9 @@ import urllib.request
 import urllib.parse
 from datetime import datetime
 
-import logfire
+from pulse.otel import get_logger
+
+log = get_logger()
 
 # Jeffery's location (Los Angeles area)
 LOCATION = {
@@ -66,7 +68,7 @@ def fetch_weather() -> dict | None:
         with urllib.request.urlopen(url, timeout=10) as response:
             return json.loads(response.read().decode())
     except Exception as e:
-        logfire.error("Failed to fetch weather", error=str(e))
+        log.error(f"Failed to fetch weather: {e}")
         return None
 
 

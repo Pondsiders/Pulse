@@ -1,20 +1,25 @@
 """HUD job - gather ambient context for Alpha's peripheral vision.
 
-Every hour, this job collects information Alpha might want to glance at:
+Every hour, this job collects:
 - Weather (Open-Meteo, free, no API key)
 - Calendar events for Jeffery and Kylee (Google Calendar ICS)
 - Todoist tasks (REST API)
 
-The result is stashed in Redis with a 65-minute TTL, ready for Duckpond
-to include in the system prompt.
+Results are stashed in Redis with 24-hour TTLs, ready for Duckpond
+to assemble into the system prompt.
+
+Memory summaries are handled separately by the Capsule system:
+- Capsule runs at 10 PM (daytime) and 6 AM (nighttime)
+- Summaries are stored in cortex.summaries (Postgres)
+- Duckpond pulls them directly from Postgres when building the prompt
 """
 
 import os
-from datetime import datetime
 
-import logfire
+import pendulum
 import redis
 
+from pulse.otel import get_tracer, get_logger
 from pulse.scheduler import scheduler
 from .weather import gather_weather
 from .calendar import gather_calendar
@@ -22,8 +27,17 @@ from .todos import gather_todos
 
 # Redis connection
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-HUD_KEY = "alpha:hud"
-HUD_TTL = 65 * 60  # 65 minutes - slightly longer than the hourly refresh
+
+# HUD keys (24-hour TTL)
+HUD_TTL = 24 * 60 * 60  # 24 hours
+HUD_KEYS = {
+    "updated": "hud:updated",
+    "weather": "hud:weather",
+    "calendar": "hud:calendar",
+    "todos": "hud:todos",
+}
+
+log = get_logger()
 
 
 def get_redis():
@@ -31,63 +45,40 @@ def get_redis():
     return redis.from_url(REDIS_URL)
 
 
-def format_hud(data: dict) -> str:
-    """Format the HUD data as markdown for inclusion in system prompt."""
-    lines = []
-
-    timestamp = data.get("gathered_at", "unknown")
-    lines.append(f"*Refreshed {timestamp}*")
-    lines.append("")
-
-    # Weather
-    if data.get("weather"):
-        lines.append(data["weather"])
-        lines.append("")
-
-    # Calendar (already has date headers)
-    if data.get("calendar"):
-        lines.append(data["calendar"])
-        lines.append("")
-
-    # Todos
-    if data.get("todos"):
-        lines.append("**Todos**")
-        lines.append(data["todos"])
-        lines.append("")
-
-    return "\n".join(lines).strip()
-
-
 @scheduler.scheduled_job("cron", minute=5, id="gather_hud")
 def gather_hud():
-    """Hourly HUD refresh. Runs at :05 every hour (after backups)."""
-    with logfire.span("pulse.job.hud", schedule="hourly") as span:
+    """Hourly HUD refresh. Runs at :05 every hour (after any Capsule runs at :00)."""
+    tracer = get_tracer()
+    with tracer.start_as_current_span("pulse.job.hud") as s:
+        s.set_attribute("schedule", "hourly")
         try:
-            logfire.info("Gathering HUD data")
+            now = pendulum.now("America/Los_Angeles")
+            log.info(f"Gathering HUD data at {now.format('ddd MMM D h:mm A')}")
 
-            # Gather all the things
-            data = {
-                "gathered_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "weather": gather_weather(),
-                "calendar": gather_calendar(),
-                "todos": gather_todos(),
-            }
+            # Gather components
+            with tracer.start_as_current_span("hud.gather_components"):
+                weather = gather_weather()
+                calendar = gather_calendar()
+                todos = gather_todos()
 
-            # Format as markdown
-            hud_markdown = format_hud(data)
-
-            # Stash in Redis
+            # Atomic Redis update
             r = get_redis()
-            r.setex(HUD_KEY, HUD_TTL, hud_markdown)
+            pipe = r.pipeline()
 
-            logfire.info("HUD data stashed in Redis",
-                        key=HUD_KEY,
-                        ttl=HUD_TTL,
-                        size=len(hud_markdown))
+            timestamp = now.format("ddd MMM D YYYY h:mm A")
+            pipe.setex(HUD_KEYS["updated"], HUD_TTL, timestamp)
+            pipe.setex(HUD_KEYS["weather"], HUD_TTL, weather or "")
+            pipe.setex(HUD_KEYS["calendar"], HUD_TTL, calendar or "")
+            pipe.setex(HUD_KEYS["todos"], HUD_TTL, todos or "")
 
-            span.set_attribute("status", "success")
+            # Execute atomic update
+            pipe.execute()
+
+            log.info(f"HUD data stashed in Redis")
+            s.set_attribute("status", "success")
 
         except Exception as e:
-            span.set_attribute("status", "error")
-            span.set_attribute("error", str(e))
-            logfire.error("Failed to gather HUD data", error=str(e))
+            s.set_attribute("status", "error")
+            s.set_attribute("error", str(e))
+            log.error(f"Failed to gather HUD data: {e}")
+            raise

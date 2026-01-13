@@ -6,9 +6,12 @@ as dates (not datetimes) to avoid off-by-one errors from UTC conversion.
 
 import urllib.request
 
-import logfire
 import pendulum
 from icalendar import Calendar
+
+from pulse.otel import get_logger
+
+log = get_logger()
 
 PACIFIC = "America/Los_Angeles"
 
@@ -25,7 +28,7 @@ def fetch_calendar(url: str) -> Calendar | None:
         with urllib.request.urlopen(url, timeout=10) as response:
             return Calendar.from_ical(response.read())
     except Exception as e:
-        logfire.error("Failed to fetch calendar", url=url, error=str(e))
+        log.error(f"Failed to fetch calendar: {e}")
         return None
 
 
