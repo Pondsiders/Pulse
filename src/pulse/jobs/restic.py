@@ -3,15 +3,14 @@
 import os
 import subprocess
 
-import logfire
-
+from pulse.otel import get_tracer, get_logger
 from pulse.scheduler import scheduler
 
 # Restic configuration
 RESTIC_REPO = os.getenv(
     "RESTIC_REPOSITORY", "s3:s3.us-west-000.backblazeb2.com/alpha-pondside-backup"
 )
-BACKUP_PATH = "/Volumes/Pondside"
+BACKUP_PATH = "/Pondside"
 
 # Exclusions - reconstructible, generated, or ephemeral files
 EXCLUDES = [
@@ -32,6 +31,8 @@ EXCLUDES = [
     "Basement/Eavesdrop/data/flows.mitm",
 ]
 
+log = get_logger()
+
 
 def run_restic(*args: str) -> subprocess.CompletedProcess:
     """Run a restic command with the configured repository."""
@@ -39,36 +40,31 @@ def run_restic(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
 
 
-@scheduler.scheduled_job("cron", minute=0, id="backup_pondside")
+@scheduler.scheduled_job("cron", minute="*/10", id="backup_pondside")
 def backup_pondside():
-    """Hourly backup of Pondside to Backblaze B2 via Restic. Runs at :00 every hour."""
-    with logfire.span("pulse.job.restic", schedule="hourly") as span:
+    """Backup Pondside to Backblaze B2 via Restic. Runs every 10 minutes."""
+    tracer = get_tracer()
+    with tracer.start_as_current_span("pulse.job.restic") as s:
+        s.set_attribute("schedule", "every-10-min")
         try:
             # Build backup command with exclusions
             backup_args = ["backup", BACKUP_PATH]
             for pattern in EXCLUDES:
                 backup_args.extend(["--exclude", pattern])
 
-            logfire.info("Starting backup", path=BACKUP_PATH)
+            log.info(f"Starting backup of {BACKUP_PATH}")
             result = run_restic(*backup_args)
 
             if result.returncode != 0:
-                span.set_attribute("status", "failed")
-                span.set_attribute("error", result.stderr)
-                logfire.error(
-                    "Backup failed",
-                    returncode=result.returncode,
-                    stderr=result.stderr[-1000:] if result.stderr else None,
-                )
+                s.set_attribute("status", "failed")
+                s.set_attribute("error", result.stderr[:1000] if result.stderr else "")
+                log.error(f"Backup failed: {result.stderr[-500:] if result.stderr else 'unknown error'}")
                 return  # Don't prune if backup failed
 
-            logfire.info(
-                "Backup complete",
-                stdout_tail=result.stdout[-500:] if result.stdout else None,
-            )
+            log.info("Backup complete")
 
             # Prune old snapshots per retention policy
-            logfire.info("Pruning old snapshots")
+            log.info("Pruning old snapshots")
             prune_result = run_restic(
                 "forget",
                 "--keep-hourly",
@@ -83,24 +79,17 @@ def backup_pondside():
             )
 
             if prune_result.returncode != 0:
-                logfire.warn(
-                    "Prune failed (backup succeeded)",
-                    returncode=prune_result.returncode,
-                    stderr=prune_result.stderr[-500:] if prune_result.stderr else None,
-                )
+                log.warning(f"Prune failed (backup succeeded): {prune_result.stderr[-500:] if prune_result.stderr else ''}")
             else:
-                logfire.info(
-                    "Prune complete",
-                    stdout_tail=prune_result.stdout[-500:] if prune_result.stdout else None,
-                )
+                log.info("Prune complete")
 
-            span.set_attribute("status", "success")
+            s.set_attribute("status", "success")
 
         except subprocess.TimeoutExpired:
-            span.set_attribute("status", "timeout")
-            logfire.error("Backup timed out after 1 hour")
+            s.set_attribute("status", "timeout")
+            log.error("Backup timed out after 1 hour")
 
         except Exception as e:
-            span.set_attribute("status", "error")
-            span.set_attribute("error", str(e))
-            logfire.error("Unexpected error during backup", error=str(e))
+            s.set_attribute("status", "error")
+            s.set_attribute("error", str(e))
+            log.error(f"Unexpected error during backup: {e}")
