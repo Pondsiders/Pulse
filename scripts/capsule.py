@@ -299,7 +299,7 @@ async def run_capsule(prompt: str, system_prompt: str | None,
 
 
 # === Main ===
-async def async_main(period: str):
+async def async_main(period: str, date_str: str | None = None):
     print("=" * 60)
     print(f"Capsule: Summarizing {period}")
     print("=" * 60)
@@ -308,7 +308,20 @@ async def async_main(period: str):
     # Init - environment is already populated by Pulse's env.py
     tracer = init_otel()
     database_url = os.environ.get("DATABASE_URL", "")
-    now = pendulum.now("America/Los_Angeles")
+
+    # Use specified date or now
+    if date_str:
+        # Parse date and set appropriate time based on period
+        base_date = pendulum.parse(date_str, tz="America/Los_Angeles")
+        if period == "daytime":
+            # For daytime, we need "now" to be at or after 10 PM to get that day's range
+            now = base_date.replace(hour=22, minute=0, second=0, microsecond=0)
+        else:  # nighttime
+            # For nighttime, we need "now" to be at or after 6 AM next day
+            now = base_date.add(days=1).replace(hour=6, minute=0, second=0, microsecond=0)
+        print(f"Using specified date: {date_str} (simulated now: {now})")
+    else:
+        now = pendulum.now("America/Los_Angeles")
 
     # Calculate time range
     start, end = get_time_range(period, now)
@@ -393,9 +406,17 @@ def main():
         choices=["daytime", "nighttime"],
         help="Which period to summarize"
     )
+    parser.add_argument(
+        "--date",
+        type=str,
+        default=None,
+        help="Date to summarize (YYYY-MM-DD). For daytime, summarizes that day. "
+             "For nighttime, summarizes the night starting that evening. "
+             "Defaults to today/now."
+    )
     args = parser.parse_args()
 
-    asyncio.run(async_main(args.period))
+    asyncio.run(async_main(args.period, args.date))
 
 
 if __name__ == "__main__":
