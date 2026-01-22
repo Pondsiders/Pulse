@@ -49,7 +49,7 @@ def backup_pondside():
     """Hourly backup of Pondside to Backblaze B2 via Restic."""
     with logfire.span('pulse.job.restic'):
         result = subprocess.run(
-            ['restic', 'backup', '/Volumes/Pondside', ...],
+            ['restic', 'backup', '/Pondside', ...],
             capture_output=True, text=True
         )
         if result.returncode != 0:
@@ -109,7 +109,7 @@ LOGFIRE_TOKEN=xxx
 
 **Setup flow:**
 ```bash
-cd /Volumes/Pondside/Basement/Pulse
+cd /Pondside/Basement/Pulse
 op inject -i .env.op -o .env
 # Requires biometric auth (Touch ID / fingerprint)
 ```
@@ -123,7 +123,7 @@ op inject -i .env.op -o .env
 Loaded at startup via `python-dotenv`:
 ```python
 from dotenv import load_dotenv
-load_dotenv('/Volumes/Pondside/Basement/Pulse/.env')
+load_dotenv('/Pondside/Basement/Pulse/.env')
 ```
 
 ---
@@ -141,7 +141,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=alpha
-WorkingDirectory=/Volumes/Pondside/Basement/Pulse
+WorkingDirectory=/Pondside/Basement/Pulse
 ExecStart=/usr/bin/uv run python -m pulse.main
 Restart=always
 RestartSec=10
@@ -208,7 +208,7 @@ logfire.configure(
 **Purpose:** Incremental backup of Pondside to Backblaze B2
 
 **What it does:**
-1. Run `restic backup /Volumes/Pondside` with exclusions
+1. Run `restic backup /Pondside` with exclusions
 2. Run `restic forget --keep-hourly 24 --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`
 3. Log success/failure to Logfire
 
@@ -269,7 +269,7 @@ import os
 from dotenv import load_dotenv
 
 # Load secrets first
-load_dotenv('/Volumes/Pondside/Basement/Pulse/.env')
+load_dotenv('/Pondside/Basement/Pulse/.env')
 
 import logfire
 logfire.configure(
@@ -332,7 +332,7 @@ dependencies = [
 
 ## Questions Resolved
 
-1. **Where do secrets live?** → `/Volumes/Pondside/Basement/Pulse/.env`, gitignored, synced
+1. **Where do secrets live?** → `/Pondside/Basement/Pulse/.env`, gitignored, synced
 2. **How often does Restic run?** → Hourly
 3. **What retention policy?** → 24 hourly, 7 daily, 4 weekly, 6 monthly
 4. **User service or system service?** → System service, runs as `alpha` user
