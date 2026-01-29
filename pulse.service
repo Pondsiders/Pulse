@@ -6,9 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/Pondside/Basement/Pulse
-# UV_PATH for subprocess spawning (solitude_next, etc.) since systemd doesn't inherit user PATH
-Environment="UV_PATH=/home/alpha/.local/bin/uv"
-ExecStart=/home/alpha/.local/bin/uv run python -m pulse.main
+ExecStart=uv run python -m pulse.main
 Restart=always
 RestartSec=10
 
