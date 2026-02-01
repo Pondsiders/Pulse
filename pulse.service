@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/Pondside/Basement/Pulse
 ExecStart=uv run python -m pulse.main
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Restart=always
 RestartSec=10
 

@@ -10,7 +10,6 @@ These are DISABLED by default. To enable, change ENABLED to True.
 Make sure the old Solitude service is stopped first!
 """
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -49,9 +48,7 @@ def run_solitude(prompt_file: Path | None = None, breath_type: str = "regular"):
     with tracer.start_as_current_span(f"solitude.{breath_type}") as span:
         span.set_attribute("breath_type", breath_type)
 
-        # Use UV_PATH if set (for systemd environments), fall back to PATH lookup
-        uv = os.environ.get("UV_PATH", "uv")
-        cmd = [uv, "run", str(SOLITUDE_NEXT), "--breath-type", breath_type]
+        cmd = ["uv", "run", str(SOLITUDE_NEXT), "--breath-type", breath_type]
         if prompt_file:
             cmd.extend(["--prompt", str(prompt_file)])
             span.set_attribute("prompt_file", str(prompt_file))

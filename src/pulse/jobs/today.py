@@ -11,7 +11,6 @@ evening. With this, she has a continuous sense of "today" even across
 multiple compactions.
 """
 
-import os
 import subprocess
 
 from pulse.otel import get_tracer, get_logger
@@ -27,9 +26,7 @@ def run_today():
     """Run the today routine via the routines harness."""
     tracer = get_tracer()
     with tracer.start_as_current_span("pulse.job.today") as span:
-        # Use UV_PATH if set (for systemd environments), fall back to PATH lookup
-        uv = os.environ.get("UV_PATH", "uv")
-        cmd = [uv, "run", "routines", "run", "alpha.today"]
+        cmd = ["uv", "run", "routines", "run", "alpha.today"]
 
         log.info("Starting 'today so far' routine")
 

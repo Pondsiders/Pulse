@@ -6,7 +6,6 @@ Forks from the day's Duckpond session and writes a forward-looking letter
 about what she's carrying into tomorrow.
 """
 
-import os
 import subprocess
 
 from pulse.otel import get_tracer, get_logger
@@ -22,9 +21,7 @@ def run_to_self():
     """Run the to_self routine via the routines harness."""
     tracer = get_tracer()
     with tracer.start_as_current_span("pulse.job.to_self") as span:
-        # Use UV_PATH if set (for systemd environments), fall back to PATH lookup
-        uv = os.environ.get("UV_PATH", "uv")
-        cmd = [uv, "run", "routines", "run", "alpha.to_self"]
+        cmd = ["uv", "run", "routines", "run", "alpha.to_self"]
 
         log.info("Starting to_self letter routine")
 

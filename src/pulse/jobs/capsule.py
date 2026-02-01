@@ -10,7 +10,6 @@ She wakes up with her memories, reflects on the period, and
 stores the summary in cortex.summaries.
 """
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -37,9 +36,7 @@ def run_capsule(period: str):
     with tracer.start_as_current_span(f"capsule.{period}") as span:
         span.set_attribute("period", period)
 
-        # Use UV_PATH if set (for systemd environments), fall back to PATH lookup
-        uv = os.environ.get("UV_PATH", "uv")
-        cmd = [uv, "run", "--script", str(CAPSULE_SCRIPT), "--period", period]
+        cmd = ["uv", "run", "--script", str(CAPSULE_SCRIPT), "--period", period]
 
         log.info(f"Starting capsule {period} summary")
 

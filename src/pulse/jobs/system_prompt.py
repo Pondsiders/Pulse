@@ -10,7 +10,6 @@ Results are stashed in Redis with 65-minute TTLs, ready for Eavesdrop's
 SystemPromptComposer addon to assemble into the final system prompt.
 """
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -30,9 +29,7 @@ def run_system_prompt():
     """Run the system_prompt script to gather and stash all parts."""
     tracer = get_tracer()
     with tracer.start_as_current_span("pulse.job.system_prompt") as span:
-        # Use UV_PATH if set (for systemd environments), fall back to PATH lookup
-        uv = os.environ.get("UV_PATH", "uv")
-        cmd = [uv, "run", "--script", str(SCRIPT)]
+        cmd = ["uv", "run", "--script", str(SCRIPT)]
 
         log.info("Gathering system prompt parts")
 

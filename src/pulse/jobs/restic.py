@@ -1,6 +1,5 @@
 """Restic backup job - runs the restic.py script every 10 minutes."""
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -8,7 +7,6 @@ from pulse.otel import get_tracer, get_logger
 from pulse.scheduler import scheduler
 
 SCRIPT_PATH = Path("/Pondside/Basement/Pulse/scripts/restic.py")
-UV_PATH = os.environ.get("UV_PATH", "/home/alpha/.local/bin/uv")
 
 log = get_logger()
 
@@ -31,7 +29,7 @@ def backup_pondside():
 
             # Run the script - it handles everything including OTel
             result = subprocess.run(
-                [UV_PATH, "run", "--script", str(SCRIPT_PATH)],
+                ["uv", "run", "--script", str(SCRIPT_PATH)],
                 capture_output=True,
                 text=True,
                 timeout=3600,  # 1 hour max
