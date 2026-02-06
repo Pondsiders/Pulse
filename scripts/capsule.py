@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "alpha_sdk @ file:///Pondside/Basement/alpha_sdk",
+#     "alpha_sdk @ git+https://github.com/Pondsiders/Alpha-SDK@main",
 #     "psycopg[binary]>=3.1",
 #     "pendulum>=3.0",
 # ]
