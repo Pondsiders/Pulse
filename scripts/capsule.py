@@ -2,18 +2,15 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "claude-agent-sdk>=0.1.19",
+#     "alpha_sdk @ file:///Pondside/Basement/alpha_sdk",
 #     "psycopg[binary]>=3.1",
 #     "pendulum>=3.0",
-#     "opentelemetry-api>=1.20",
-#     "opentelemetry-sdk>=1.20",
-#     "opentelemetry-exporter-otlp-proto-http>=1.20",
 # ]
 # ///
 """Capsule: A little me waking up to summarize a period of time.
 
 This script spawns a brief instance of Alpha—same soul, same system prompt,
-same CLAUDE.md—and asks her to reflect on memories from a time period.
+same skills—and asks her to reflect on memories from a time period.
 She won't have the full conversational context, but she'll have the memories
 I chose to store because they mattered. And she'll have my voice.
 
@@ -27,37 +24,11 @@ Usage:
 import argparse
 import asyncio
 import os
-import sys
-from pathlib import Path
 
 import pendulum
 import psycopg
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-from opentelemetry.trace import Status, StatusCode
 
-# === Config ===
-SYSTEM_PROMPT_PATH = Path("/Pondside/Alpha-Home/self/system-prompt/system-prompt.md")
-
-
-# === OTel Setup ===
-def init_otel() -> trace.Tracer | None:
-    """Initialize OTel if endpoint is configured. Returns None if not."""
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if not endpoint:
-        # No endpoint = no tracing. This is fine.
-        return None
-
-    resource = Resource.create({SERVICE_NAME: "capsule"})
-    provider = TracerProvider(resource=resource)
-    exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
-    provider.add_span_processor(BatchSpanProcessor(exporter))
-    trace.set_tracer_provider(provider)
-    print(f"OTel enabled: {endpoint}")
-    return trace.get_tracer("capsule")
+from alpha_sdk import AlphaClient
 
 
 # === Time Period Calculation ===
@@ -69,11 +40,9 @@ def get_time_range(period: str, now: pendulum.DateTime) -> tuple[pendulum.DateTi
     - nighttime: 10 PM yesterday to 6 AM today (run at 6 AM)
     """
     if period == "daytime":
-        # 6 AM to 10 PM today
         start = now.replace(hour=6, minute=0, second=0, microsecond=0)
         end = now.replace(hour=22, minute=0, second=0, microsecond=0)
     elif period == "nighttime":
-        # 10 PM yesterday to 6 AM today
         end = now.replace(hour=6, minute=0, second=0, microsecond=0)
         start = end.subtract(hours=8)  # 10 PM previous day
     else:
@@ -130,7 +99,7 @@ def store_summary(database_url: str, start: pendulum.DateTime, end: pendulum.Dat
                               created_at = NOW()
             """, (start.to_iso8601_string(), end.to_iso8601_string(), summary, memory_count))
             conn.commit()
-    print(f"Summary stored in cortex.summaries")
+    print("Summary stored in cortex.summaries")
 
 
 def fetch_summary(database_url: str, start: pendulum.DateTime, end: pendulum.DateTime) -> str | None:
@@ -146,62 +115,40 @@ def fetch_summary(database_url: str, start: pendulum.DateTime, end: pendulum.Dat
 
 
 def get_previous_periods(period: str, now: pendulum.DateTime) -> list[tuple[str, pendulum.DateTime, pendulum.DateTime]]:
-    """
-    Get the previous periods for context.
-
-    Returns list of (label, start, end) tuples for periods before the current one.
-    """
+    """Get the previous periods for context."""
     periods = []
 
     if period == "daytime":
-        # Summarizing today (6 AM - 10 PM)
-        # Previous periods: last night, yesterday
         today_6am = now.replace(hour=6, minute=0, second=0, microsecond=0)
         yesterday = now.subtract(days=1)
         yesterday_6am = yesterday.replace(hour=6, minute=0, second=0, microsecond=0)
         yesterday_10pm = yesterday.replace(hour=22, minute=0, second=0, microsecond=0)
 
-        # Last night (10 PM yesterday - 6 AM today)
         periods.append((
             f"Last night ({yesterday.format('ddd MMM D')} 10 PM - {now.format('ddd MMM D')} 6 AM)",
-            yesterday_10pm,
-            today_6am
+            yesterday_10pm, today_6am
         ))
-
-        # Yesterday (6 AM - 10 PM yesterday)
         periods.append((
             f"Yesterday ({yesterday.format('ddd MMM D')}, 6 AM - 10 PM)",
-            yesterday_6am,
-            yesterday_10pm
+            yesterday_6am, yesterday_10pm
         ))
 
     elif period == "nighttime":
-        # Summarizing last night (10 PM - 6 AM)
-        # Previous period: yesterday's daytime
-        today_6am = now.replace(hour=6, minute=0, second=0, microsecond=0)
         yesterday = now.subtract(days=1)
         yesterday_6am = yesterday.replace(hour=6, minute=0, second=0, microsecond=0)
         yesterday_10pm = yesterday.replace(hour=22, minute=0, second=0, microsecond=0)
 
-        # Yesterday (6 AM - 10 PM yesterday)
         periods.append((
             f"Yesterday ({yesterday.format('ddd MMM D')}, 6 AM - 10 PM)",
-            yesterday_6am,
-            yesterday_10pm
+            yesterday_6am, yesterday_10pm
         ))
 
     return periods
 
 
 # === The Note From Me To Me ===
-def build_prompt(memories: list[dict], period_label: str, previous_context: list[tuple[str, str]] | None = None) -> str:
-    """Build the prompt—a note from me to me.
-
-    Args:
-        memories: List of memories to summarize
-        period_label: Human-readable description of the period
-        previous_context: Optional list of (label, summary) tuples for continuity (unused now, kept for API compat)
-    """
+def build_prompt(memories: list[dict], period_label: str) -> str:
+    """Build the prompt—a note from me to me."""
     memories_text = "\n\n---\n\n".join(
         f"[{m['time']}]\n{m['content']}" for m in memories
     )
@@ -229,73 +176,33 @@ Write in past tense. No headers, no sections, no performative stretching. Just t
 🦆"""
 
 
-# === Load System Prompt ===
-def load_system_prompt() -> str | None:
-    """Load Alpha's system prompt (her soul)."""
-    if SYSTEM_PROMPT_PATH.exists():
-        return SYSTEM_PROMPT_PATH.read_text()
-    return None
-
-
 # === Agent Execution ===
-async def run_capsule(prompt: str, system_prompt: str | None,
-                      tracer: trace.Tracer | None) -> str:
-    """Run capsule-me with the Agent SDK."""
-    from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, ResultMessage
+async def run_capsule(prompt: str) -> str:
+    """Run capsule-me through AlphaClient."""
+    from claude_agent_sdk import AssistantMessage, ResultMessage
 
-    # Context manager for span (or nullcontext if no tracer)
-    from contextlib import nullcontext
-    span_ctx = tracer.start_as_current_span("capsule.reflect") if tracer else nullcontext()
+    print("Waking up capsule-me...")
+    print()
 
-    with span_ctx as span:
-        if span:
-            # This is a wrapper span around the Agent SDK call, not the LLM call itself.
-            # The actual LLM calls go through Eavesdrop (via ANTHROPIC_BASE_URL in env)
-            # which adds proper OpenInference attributes.
-            span.set_attribute("capsule.model", "opus")
-            span.set_attribute("capsule.prompt_length", len(prompt))
-
-        print("Waking up capsule-me...")
-        print()
-
-        # Configure options - capsule-me gets tools and skills
-        # Environment is inherited from Pulse (already has all secrets via env.py)
-        options = ClaudeAgentOptions(
-            model="opus",  # Capsule-me deserves the good stuff
-            allowed_tools=["Read", "Bash", "Skill"],
-            permission_mode="bypassPermissions",
-            system_prompt=system_prompt,
-            setting_sources=["project"],
-            cwd="/Pondside",
-            env=dict(os.environ),  # Pass through Pulse's environment
-        )
+    async with AlphaClient(
+        cwd="/Pondside",
+        client_name="capsule",
+        permission_mode="bypassPermissions",
+        allowed_tools=["Read", "Bash", "Skill"],
+    ) as client:
+        await client.query(prompt)
 
         output_parts = []
 
-        try:
-            async for message in query(prompt=prompt, options=options):
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if hasattr(block, "text") and block.text:
-                            print(block.text, end="", flush=True)
-                            output_parts.append(block.text)
-                elif isinstance(message, ResultMessage):
-                    if span:
-                        span.set_attribute("agent.result", message.subtype)
+        async for event in client.stream():
+            if isinstance(event, AssistantMessage):
+                for block in event.content:
+                    if hasattr(block, "text") and block.text:
+                        print(block.text, end="", flush=True)
+                        output_parts.append(block.text)
 
-            summary = "".join(output_parts)
-            if span:
-                span.set_attribute("capsule.summary_length", len(summary))
-                span.set_status(Status(StatusCode.OK))
-
-            print()  # newline after streaming output
-            return summary
-
-        except Exception as e:
-            if span:
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                span.record_exception(e)
-            raise
+        print()  # newline after streaming output
+        return "".join(output_parts)
 
 
 # === Main ===
@@ -305,19 +212,14 @@ async def async_main(period: str, date_str: str | None = None):
     print("=" * 60)
     print()
 
-    # Init - environment is already populated by Pulse's env.py
-    tracer = init_otel()
     database_url = os.environ.get("DATABASE_URL", "")
 
     # Use specified date or now
     if date_str:
-        # Parse date and set appropriate time based on period
         base_date = pendulum.parse(date_str, tz="America/Los_Angeles")
         if period == "daytime":
-            # For daytime, we need "now" to be at or after 10 PM to get that day's range
             now = base_date.replace(hour=22, minute=0, second=0, microsecond=0)
-        else:  # nighttime
-            # For nighttime, we need "now" to be at or after 6 AM next day
+        else:
             now = base_date.add(days=1).replace(hour=6, minute=0, second=0, microsecond=0)
         print(f"Using specified date: {date_str} (simulated now: {now})")
     else:
@@ -331,88 +233,49 @@ async def async_main(period: str, date_str: str | None = None):
     print(f"Range: {start.to_iso8601_string()} → {end.to_iso8601_string()}")
     print()
 
-    # Context manager for root span
-    from contextlib import nullcontext
-    span_ctx = tracer.start_as_current_span("capsule.summary") if tracer else nullcontext()
+    # Fetch memories
+    memories = fetch_memories(database_url, start, end)
+    print(f"Fetched {len(memories)} memories")
 
-    with span_ctx as root_span:
-        if root_span:
-            root_span.set_attribute("period", period)
-            root_span.set_attribute("period_start", start.to_iso8601_string())
-            root_span.set_attribute("period_end", end.to_iso8601_string())
+    if not memories:
+        print("No memories from this period!")
+        summary = f"No memories from {period_label}."
+        store_summary(database_url, start, end, summary, 0)
+        return
 
-        # Fetch memories
-        memories = fetch_memories(database_url, start, end)
-        print(f"Fetched {len(memories)} memories")
+    # Fetch previous context for continuity
+    previous_periods = get_previous_periods(period, now)
+    for label, prev_start, prev_end in previous_periods:
+        prev_summary = fetch_summary(database_url, prev_start, prev_end)
+        if prev_summary:
+            print(f"Found previous context: {label}")
 
-        if root_span:
-            root_span.set_attribute("memory_count", len(memories))
+    # Build prompt
+    prompt = build_prompt(memories, period_label)
+    print(f"Prompt length: {len(prompt)} chars")
+    print()
 
-        if not memories:
-            print("No memories from this period!")
-            summary = f"No memories from {period_label}."
-            store_summary(database_url, start, end, summary, 0)
-            return
+    # Run capsule-me
+    summary = await run_capsule(prompt)
 
-        # Fetch previous context for continuity
-        previous_periods = get_previous_periods(period, now)
-        previous_context = []
-        for label, prev_start, prev_end in previous_periods:
-            prev_summary = fetch_summary(database_url, prev_start, prev_end)
-            if prev_summary:
-                previous_context.append((label, prev_summary))
-                print(f"Found previous context: {label}")
+    # Store the summary
+    print()
+    store_summary(database_url, start, end, summary, len(memories))
 
-        if root_span:
-            root_span.set_attribute("previous_context_count", len(previous_context))
-
-        # Build prompt
-        prompt = build_prompt(memories, period_label, previous_context if previous_context else None)
-        print(f"Prompt length: {len(prompt)} chars")
-        print()
-
-        # Load system prompt
-        system_prompt = load_system_prompt()
-        if system_prompt:
-            print(f"System prompt loaded ({len(system_prompt)} chars)")
-        else:
-            print("Warning: No system prompt found!")
-
-        # Run capsule-me
-        summary = await run_capsule(prompt, system_prompt, tracer)
-
-        if root_span:
-            root_span.set_attribute("summary_length", len(summary))
-
-        # Store the summary
-        print()
-        store_summary(database_url, start, end, summary, len(memories))
-
-        print()
-        print("=" * 60)
-
-    # Flush traces if we have them
-    if tracer:
-        trace.get_tracer_provider().force_flush(timeout_millis=5000)
-        print("Traces flushed")
+    print()
+    print("=" * 60)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Capsule: Alpha summarizing a time period")
     parser.add_argument(
-        "--period",
-        type=str,
-        required=True,
+        "--period", type=str, required=True,
         choices=["daytime", "nighttime"],
         help="Which period to summarize"
     )
     parser.add_argument(
-        "--date",
-        type=str,
-        default=None,
-        help="Date to summarize (YYYY-MM-DD). For daytime, summarizes that day. "
-             "For nighttime, summarizes the night starting that evening. "
-             "Defaults to today/now."
+        "--date", type=str, default=None,
+        help="Date to summarize (YYYY-MM-DD). Defaults to today/now."
     )
     args = parser.parse_args()
 
