@@ -21,14 +21,13 @@ def run_to_self():
     """Run the to_self routine via the routines harness."""
     tracer = get_tracer()
     with tracer.start_as_current_span("pulse.job.to_self") as span:
-        cmd = ["uv", "run", "routines", "run", "alpha.to_self"]
+        cmd = ["uv", "run", "--project", "/Pondside/Basement/Routines", "routines", "run", "alpha.to_self"]
 
         log.info("Starting to_self letter routine")
 
         try:
             result = subprocess.run(
                 cmd,
-                cwd="/Pondside/Basement/Routines",
                 capture_output=True,
                 text=True,
                 timeout=TIMEOUT_SECONDS,

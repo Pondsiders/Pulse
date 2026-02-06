@@ -26,14 +26,13 @@ def run_today():
     """Run the today routine via the routines harness."""
     tracer = get_tracer()
     with tracer.start_as_current_span("pulse.job.today") as span:
-        cmd = ["uv", "run", "routines", "run", "alpha.today"]
+        cmd = ["uv", "run", "--project", "/Pondside/Basement/Routines", "routines", "run", "alpha.today"]
 
         log.info("Starting 'today so far' routine")
 
         try:
             result = subprocess.run(
                 cmd,
-                cwd="/Pondside/Basement/Routines",
                 capture_output=True,
                 text=True,
                 timeout=TIMEOUT_SECONDS,
