@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Observation Flight - Test harness for Solitude Next.
+Observation Flight - Test harness for Solitude routines.
 
 This script simulates what Pulse does when it spawns a Solitude breath,
 but runs immediately instead of waiting for the schedule. It's for testing
-the full chain: Pulse → uv → solitude_next → Claude Agent SDK → tools.
+the full chain: Pulse → Routines harness → AlphaClient → tools.
 
 Usage:
     # From Pulse directory, with environment loaded:
@@ -15,7 +15,7 @@ Usage:
 
 What it does:
     1. Initializes OTel (traces go to Logfire)
-    2. Calls run_solitude() with the observation_flight.md prompt
+    2. Calls run_solitude() with alpha.solitude.first (or override)
     3. Captures and displays stdout
     4. Reports success/failure
 """
@@ -51,26 +51,28 @@ init_otel()
 # Now import the job module (which uses the tracer)
 from pulse.jobs.solitude_next import run_solitude
 
-# Test prompt path
-TEST_PROMPT = Path(__file__).parent / "observation_flight.md"
 
 def main():
+    # Default to first breath, or override via argv
+    routine_name = sys.argv[1] if len(sys.argv) > 1 else "alpha.solitude.first"
+    breath_type = routine_name.rsplit(".", 1)[-1] if "." in routine_name else "test"
+
     print()
     print("=" * 60)
-    print("  OBSERVATION FLIGHT - Solitude Next Systems Check")
+    print("  OBSERVATION FLIGHT - Solitude Systems Check")
     print("=" * 60)
     print()
-    print(f"[Test] Prompt file: {TEST_PROMPT}")
+    print(f"[Test] Routine: {routine_name}")
     print(f"[Test] UV_PATH: {os.environ.get('UV_PATH', '(not set)')}")
     print(f"[Test] ANTHROPIC_API_KEY: {'set' if os.environ.get('ANTHROPIC_API_KEY') else 'NOT SET'}")
     print(f"[Test] OTEL endpoint: {os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', '(not set)')}")
     print()
-    print("[Test] Launching Solitude Next...")
+    print(f"[Test] Launching Solitude ({breath_type})...")
     print("-" * 60)
     print()
 
     # Run the actual job
-    run_solitude(prompt_file=TEST_PROMPT, breath_type="test")
+    run_solitude(routine_name, breath_type)
 
     print()
     print("-" * 60)
