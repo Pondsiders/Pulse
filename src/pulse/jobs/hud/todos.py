@@ -8,7 +8,7 @@ from pulse.otel import get_logger
 
 log = get_logger()
 
-API_BASE = "https://api.todoist.com/rest/v2"
+API_BASE = "https://api.todoist.com/api/v1"
 
 # Projects to show in HUD, grouped by owner
 # Order matters: displayed in this sequence
@@ -25,7 +25,10 @@ def get_token() -> str | None:
 
 
 def api_request(endpoint: str, token: str) -> dict | list | None:
-    """Make a Todoist API request."""
+    """Make a Todoist API request.
+
+    The v1 API wraps list responses in {"results": [...]}, which we unwrap.
+    """
     url = f"{API_BASE}{endpoint}"
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -33,7 +36,11 @@ def api_request(endpoint: str, token: str) -> dict | list | None:
 
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
-            return json.loads(response.read().decode())
+            result = json.loads(response.read().decode())
+            # v1 API wraps list responses in {"results": [...]}
+            if isinstance(result, dict) and "results" in result:
+                return result["results"]
+            return result
     except Exception as e:
         log.error(f"Failed to fetch from Todoist: {e}")
         return None

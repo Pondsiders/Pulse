@@ -4,6 +4,7 @@ Uses Pendulum for sane timezone handling. All-day events are compared
 as dates (not datetimes) to avoid off-by-one errors from UTC conversion.
 """
 
+import os
 import urllib.request
 
 import pendulum
@@ -15,10 +16,10 @@ log = get_logger()
 
 PACIFIC = "America/Los_Angeles"
 
-# Calendar ICS URLs (Jeffery gets 14 days, Kylee gets today+tomorrow)
+# Calendar ICS URLs from environment (Jeffery gets 14 days, Kylee gets today+tomorrow)
 CALENDARS = [
-    ("Jeffery", "https://calendar.google.com/calendar/ical/jefferyharrell%40gmail.com/private-4b80d6d8eb2359d54f82d7e1e8be92d8/basic.ics", 14),
-    ("Kylee", "https://calendar.google.com/calendar/ical/kyleepena%40gmail.com/private-3d0dc99ce85c35981f281009b7443b2b/basic.ics", 1),
+    ("Jeffery", os.environ.get("JEFFERY_CALENDAR_ICS", ""), 14),
+    ("Kylee", os.environ.get("KYLEE_CALENDAR_ICS", ""), 1),
 ]
 
 

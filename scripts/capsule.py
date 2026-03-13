@@ -2,10 +2,18 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "alpha_sdk @ git+https://github.com/Pondsiders/Alpha-SDK@main",
+#     "alpha_sdk>=0.5,<1.0",
 #     "psycopg[binary]>=3.1",
 #     "pendulum>=3.0",
 # ]
+#
+# [[tool.uv.index]]
+# url = "https://pondsiders.github.io/Alpha-SDK/simple/"
+# name = "pondsiders"
+# explicit = true
+#
+# [tool.uv.sources]
+# alpha_sdk = { index = "pondsiders" }
 # ///
 """Capsule: A little me waking up to summarize a period of time.
 
@@ -188,7 +196,6 @@ async def run_capsule(prompt: str) -> str:
         cwd="/Pondside",
         client_name="capsule",
         permission_mode="bypassPermissions",
-        allowed_tools=["Read", "Bash", "Skill"],
     ) as client:
         await client.query(prompt)
 
